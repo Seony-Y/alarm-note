@@ -2,6 +2,28 @@
 
 일정, 메모, 반복 알람을 한곳에서 관리하는 Android 중심의 일정 앱입니다. React와 Capacitor로 구성되며 Google 로그인, Supabase 동기화, Google Calendar 가져오기를 지원합니다.
 
+## 앱 미리보기
+
+### 오늘에 집중
+
+시간순으로 오늘 일정을 확인하고 완료 여부와 알람 상태를 바로 관리합니다. 놓치면 안 되는 내용은 **중요 메모**로 화면 상단과 일정에 함께 강조됩니다.
+
+![오늘 일정과 중요 메모 화면](store-screenshots/play-store-1080x1920/02-today.png)
+
+### 계획하고, 알림 받기
+
+| 월간 일정 | 알람 관리 |
+| :---: | :---: |
+| 날짜별 일정을 한눈에 확인 | 예정된 알람을 빠르게 켜고 끄기 |
+| ![월간 캘린더 화면](store-screenshots/play-store-1080x1920/03-calendar.png) | ![알람 관리 화면](store-screenshots/play-store-1080x1920/04-alarms.png) |
+
+### 시작부터 등록까지
+
+| 간편 로그인 | 빠른 일정 등록 |
+| :---: | :---: |
+| Google 계정으로 내 일정 불러오기 | 중요 메모와 반복 알람까지 한 번에 설정 |
+| ![Google 로그인 화면](store-screenshots/play-store-1080x1920/01-login.png) | ![새 일정 등록 화면](store-screenshots/play-store-1080x1920/05-add-schedule.png) |
+
 ## 주요 기능
 
 - 일별 일정 등록, 수정, 완료, 삭제
