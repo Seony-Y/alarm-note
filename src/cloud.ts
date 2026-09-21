@@ -29,7 +29,11 @@ export async function saveCloudSchedule(schedule: Schedule, userId: string) {
   if (error) throw error;
 }
 
-export async function removeCloudSchedule(id: string) {
-  const { error } = await supabase.from("schedules").delete().eq("id", id);
+export async function removeCloudSchedule(id: string, userId: string) {
+  const { error } = await supabase
+    .from("schedules")
+    .delete()
+    .eq("user_id", userId)
+    .eq("id", id);
   if (error) throw error;
 }

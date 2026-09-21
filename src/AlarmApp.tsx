@@ -33,7 +33,10 @@ import {
   signOut,
 } from "./auth";
 import { addScheduleToDeviceAlarm, canUseDeviceAlarm } from "./device-alarm";
-import { importGoogleCalendar } from "./google-calendar.ts";
+import {
+  GoogleCalendarError,
+  importGoogleCalendar,
+} from "./google-calendar.ts";
 import { requestAlarmPermissions } from "./notifications";
 import { useScheduleStore } from "./store";
 import type { AppView, RepeatType, Schedule } from "./types";
@@ -136,17 +139,30 @@ export function AlarmApp() {
     const schedule = store.schedules.find((item) => item.id === id);
     await store.toggleAlarm(id);
     if (schedule && !schedule.alarmEnabled && canUseDeviceAlarm()) {
-      await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
+      try {
+        await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
+      } catch (error) {
+        console.error("기본 시계 알람을 추가할 수 없습니다.", error);
+      }
     }
   }
 
   async function importCalendar() {
     if (!session?.provider_token) {
-      throw new Error("Google Calendar 권한을 다시 연결해 주세요.");
+      await connectGoogleCalendar();
+      return null;
     }
-    const events = await importGoogleCalendar(session.provider_token);
-    await Promise.all(events.map((event) => store.upsert(event)));
-    return events.length;
+    try {
+      const events = await importGoogleCalendar(session.provider_token);
+      await Promise.all(events.map((event) => store.upsert(event)));
+      return events.length;
+    } catch (error) {
+      if (error instanceof GoogleCalendarError && error.status === 401) {
+        await connectGoogleCalendar();
+        return null;
+      }
+      throw error;
+    }
   }
 
   if (!authReady || !store.ready)
@@ -219,7 +235,6 @@ export function AlarmApp() {
             session={session}
             syncError={store.syncError}
             onImportCalendar={importCalendar}
-            onConnectCalendar={connectGoogleCalendar}
           />
         )}
       </main>
@@ -235,10 +250,14 @@ export function AlarmApp() {
           onClose={() => setFormOpen(false)}
           onSave={async (schedule) => {
             await store.upsert(schedule);
-            if (schedule.alarmEnabled && canUseDeviceAlarm()) {
-              await addScheduleToDeviceAlarm(schedule);
-            }
             setFormOpen(false);
+            if (schedule.alarmEnabled && canUseDeviceAlarm()) {
+              try {
+                await addScheduleToDeviceAlarm(schedule);
+              } catch (error) {
+                console.error("기본 시계 알람을 추가할 수 없습니다.", error);
+              }
+            }
           }}
           onDelete={
             editing
@@ -326,18 +345,6 @@ function PermissionSetup({ onComplete }: { onComplete: () => void }) {
             onClick={() => void allowNotifications()}
           >
             허용
-          </button>
-        </div>
-        <div className="permission-row">
-          <span>
-            <strong>Google Calendar</strong>
-            <small>선택 사항이며 일정 가져오기에만 사용됩니다.</small>
-          </span>
-          <button
-            className="secondary"
-            onClick={() => void connectGoogleCalendar()}
-          >
-            연결
           </button>
         </div>
         <button className="primary permission-continue" onClick={onComplete}>
@@ -629,8 +636,7 @@ function AlarmView({
   const [month, setMonth] = useState(dayjs().startOf("month"));
   const alarms = schedules
     .filter(
-      (item) =>
-        !item.completed && dayjs(item.date).isSame(month, "month"),
+      (item) => !item.completed && dayjs(item.date).isSame(month, "month"),
     )
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   return (
@@ -691,12 +697,10 @@ function SettingsView({
   session,
   syncError,
   onImportCalendar,
-  onConnectCalendar,
 }: {
   session: Session | null;
   syncError: string | null;
-  onImportCalendar: () => Promise<number>;
-  onConnectCalendar: () => Promise<void>;
+  onImportCalendar: () => Promise<number | null>;
 }) {
   const [vibration, setVibration] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -736,7 +740,9 @@ function SettingsView({
     setCalendarMessage(null);
     try {
       const count = await onImportCalendar();
-      setCalendarMessage(`${count}개 일정을 가져왔습니다.`);
+      if (count !== null) {
+        setCalendarMessage(`${count}개 일정을 가져왔습니다.`);
+      }
     } catch (error) {
       setCalendarMessage(
         error instanceof Error
@@ -826,14 +832,6 @@ function SettingsView({
             </small>
           </span>
           <div className="calendar-actions">
-            <button
-              className="account-button secondary"
-              disabled={!session || calendarBusy}
-              onClick={() => void onConnectCalendar()}
-            >
-              <LogIn size={17} />
-              권한 연결
-            </button>
             <button
               className="account-button secondary"
               disabled={!session || calendarBusy}

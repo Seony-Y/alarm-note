@@ -58,15 +58,35 @@ export function onAuthChange(callback: (session: Session | null) => void) {
   return () => data.subscription.unsubscribe();
 }
 
+async function handleNativeAuthUrl(url: string) {
+  if (!url.startsWith(nativeRedirectUrl)) return;
+
+  try {
+    const params = new URL(url).searchParams;
+    const oauthError = params.get("error_description") ?? params.get("error");
+    if (oauthError) throw new Error(oauthError);
+
+    const code = params.get("code");
+    if (!code) throw new Error("Google 인증 코드를 받지 못했습니다.");
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+  } finally {
+    await Browser.close();
+  }
+}
+
 export async function registerNativeAuthCallback() {
   if (!Capacitor.isNativePlatform()) return () => undefined;
 
-  const listener = await App.addListener("appUrlOpen", async ({ url }) => {
-    if (!url.startsWith(nativeRedirectUrl)) return;
-    const code = new URL(url).searchParams.get("code");
-    if (code) await supabase.auth.exchangeCodeForSession(code);
-    await Browser.close();
+  const listener = await App.addListener("appUrlOpen", ({ url }) => {
+    void handleNativeAuthUrl(url).catch((error) => {
+      console.error("Google 인증 콜백을 처리할 수 없습니다.", error);
+    });
   });
+
+  const launchUrl = await App.getLaunchUrl();
+  if (launchUrl?.url) await handleNativeAuthUrl(launchUrl.url);
 
   return () => listener.remove();
 }

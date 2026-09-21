@@ -16,6 +16,16 @@ interface GoogleCalendarResponse {
   error?: { message?: string };
 }
 
+export class GoogleCalendarError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "GoogleCalendarError";
+    this.status = status;
+  }
+}
+
 export async function importGoogleCalendar(providerToken: string) {
   const query = new URLSearchParams({
     singleEvents: "true",
@@ -28,11 +38,14 @@ export async function importGoogleCalendar(providerToken: string) {
     `https://www.googleapis.com/calendar/v3/calendars/primary/events?${query}`,
     { headers: { Authorization: `Bearer ${providerToken}` } },
   );
-  const result = (await response.json()) as GoogleCalendarResponse;
+  const result = (await response
+    .json()
+    .catch(() => ({}))) as GoogleCalendarResponse;
 
   if (!response.ok) {
-    throw new Error(
+    throw new GoogleCalendarError(
       result.error?.message ?? "Google Calendar를 불러올 수 없습니다.",
+      response.status,
     );
   }
 

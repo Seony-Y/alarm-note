@@ -21,6 +21,7 @@ interface ScheduleState {
 }
 
 const sampleScheduleIds = ["sample-1", "sample-2", "sample-3"];
+let ownerLoadVersion = 0;
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: [],
@@ -28,11 +29,13 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   ownerId: "guest",
   syncError: null,
   setOwner: async (ownerId) => {
+    const loadVersion = ++ownerLoadVersion;
     const nextOwnerId = ownerId ?? "guest";
     if (get().ownerId === nextOwnerId && get().ready) return;
 
     set({ ready: false, ownerId: nextOwnerId, syncError: null });
     const localSchedules = await loadSchedules(nextOwnerId);
+    if (loadVersion !== ownerLoadVersion) return;
 
     if (!ownerId) {
       set({ schedules: [], ready: true });
@@ -40,14 +43,17 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
 
     try {
-      await Promise.all(sampleScheduleIds.map((id) => removeCloudSchedule(id)));
-      const cloudSchedules = await loadCloudSchedules();
-      const schedules = cloudSchedules.length ? cloudSchedules : localSchedules;
       await Promise.all(
-        schedules.map((schedule) => saveSchedule(schedule, ownerId)),
+        sampleScheduleIds.map((id) => removeCloudSchedule(id, ownerId)),
       );
-      set({ schedules, ready: true });
+      const cloudSchedules = await loadCloudSchedules();
+      await Promise.all(
+        cloudSchedules.map((schedule) => saveSchedule(schedule, ownerId)),
+      );
+      if (loadVersion !== ownerLoadVersion) return;
+      set({ schedules: cloudSchedules, ready: true });
     } catch (error) {
+      if (loadVersion !== ownerLoadVersion) return;
       set({
         schedules: localSchedules,
         ready: true,
@@ -59,18 +65,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   upsert: async (schedule) => {
     const ownerId = get().ownerId;
     await saveSchedule(schedule, ownerId);
-    await syncScheduleNotifications(schedule);
-    if (ownerId !== "guest") {
-      try {
-        await saveCloudSchedule(schedule, ownerId);
-        set({ syncError: null });
-      } catch (error) {
-        set({
-          syncError:
-            error instanceof Error ? error.message : "동기화할 수 없습니다.",
-        });
-      }
-    }
+    if (get().ownerId !== ownerId) return;
     const exists = get().schedules.some((item) => item.id === schedule.id);
     set({
       schedules: exists
@@ -79,6 +74,25 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
           )
         : [...get().schedules, schedule],
     });
+    try {
+      await syncScheduleNotifications(schedule);
+    } catch (error) {
+      console.error("일정 알림을 예약할 수 없습니다.", error);
+    }
+    if (get().ownerId !== ownerId) return;
+    if (ownerId !== "guest") {
+      try {
+        await saveCloudSchedule(schedule, ownerId);
+        if (get().ownerId === ownerId) set({ syncError: null });
+      } catch (error) {
+        if (get().ownerId === ownerId) {
+          set({
+            syncError:
+              error instanceof Error ? error.message : "동기화할 수 없습니다.",
+          });
+        }
+      }
+    }
   },
   toggleCompleted: async (id) => {
     const schedule = get().schedules.find((item) => item.id === id);
@@ -93,20 +107,29 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   remove: async (id) => {
     const ownerId = get().ownerId;
     const schedule = get().schedules.find((item) => item.id === id);
-    if (schedule)
-      await syncScheduleNotifications({ ...schedule, alarmEnabled: false });
-    await removeSchedule(id, ownerId);
-    if (ownerId !== "guest") {
+    if (schedule) {
       try {
-        await removeCloudSchedule(id);
-        set({ syncError: null });
+        await syncScheduleNotifications({ ...schedule, alarmEnabled: false });
       } catch (error) {
-        set({
-          syncError:
-            error instanceof Error ? error.message : "동기화할 수 없습니다.",
-        });
+        console.error("일정 알림을 취소할 수 없습니다.", error);
       }
     }
+    await removeSchedule(id, ownerId);
+    if (get().ownerId !== ownerId) return;
+    if (ownerId !== "guest") {
+      try {
+        await removeCloudSchedule(id, ownerId);
+        if (get().ownerId === ownerId) set({ syncError: null });
+      } catch (error) {
+        if (get().ownerId === ownerId) {
+          set({
+            syncError:
+              error instanceof Error ? error.message : "동기화할 수 없습니다.",
+          });
+        }
+      }
+    }
+    if (get().ownerId !== ownerId) return;
     set({ schedules: get().schedules.filter((item) => item.id !== id) });
   },
 }));
