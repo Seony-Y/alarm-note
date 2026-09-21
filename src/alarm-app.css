@@ -704,7 +704,7 @@ textarea {
 }
 .option-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
   padding: 16px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);

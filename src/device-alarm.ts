@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import dayjs from "dayjs";
+import { alarmModeFlags, getAlarmSettings } from "./alarm-settings";
 import type { Schedule } from "./types";
 
 interface DeviceAlarmPlugin {
@@ -34,12 +35,12 @@ export async function addScheduleToDeviceAlarm(schedule: Schedule) {
   }
 
   const [hour, minute] = schedule.time.split(":").map(Number);
+  const alarmMode = alarmModeFlags(getAlarmSettings().mode);
   await DeviceAlarm.setAlarm({
     hour,
     minute,
     message: `${schedule.date} ${schedule.title}`,
     days: repeatDays(schedule),
-    soundEnabled: schedule.soundEnabled,
-    vibrationEnabled: schedule.vibrationEnabled,
+    ...alarmMode,
   });
 }

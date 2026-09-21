@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { alarmModeFlags, getAlarmSettings } from "./alarm-settings";
 import type { Schedule } from "./types";
 
 interface GoogleCalendarEvent {
@@ -56,6 +57,7 @@ export async function importGoogleCalendar(providerToken: string) {
     const reminder = event.reminders?.overrides?.find(
       (item) => item.method === "popup",
     )?.minutes;
+    const alarmMode = alarmModeFlags(getAlarmSettings().mode);
 
     return [
       {
@@ -66,10 +68,9 @@ export async function importGoogleCalendar(providerToken: string) {
         description: event.description ?? "",
         importantMemo: "",
         alarmEnabled: true,
-        notifyBeforeMinutes: [reminder ?? 10],
+        notifyBeforeMinutes: [reminder ?? 0],
         repeat: "none",
-        soundEnabled: true,
-        vibrationEnabled: true,
+        ...alarmMode,
         completed: false,
         createdAt: new Date().toISOString(),
         googleEventId: event.id,

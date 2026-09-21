@@ -27,10 +27,13 @@ button {
   border: 0;
   cursor: pointer;
 }
-button:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(255, 122, 26, 0.22);
+  outline-offset: 2px;
+}
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 3px solid rgba(255, 122, 26, 0.22);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: none;
 }

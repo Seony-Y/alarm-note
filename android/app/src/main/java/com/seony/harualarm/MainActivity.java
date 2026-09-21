@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		registerPlugin(DeviceAlarmPlugin.class);
+		registerPlugin(ScheduleWidgetPlugin.class);
 		super.onCreate(savedInstanceState);
 	}
 }

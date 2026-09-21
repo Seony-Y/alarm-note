@@ -25,6 +25,13 @@ import type { Session } from "@supabase/supabase-js";
 import checkIcon from "./assets/check.png";
 import clockIcon from "./assets/clock.png";
 import {
+  alarmModeFlags,
+  getAlarmSettings,
+  saveAlarmSettings,
+  type AlarmMode,
+  type AlarmSettings,
+} from "./alarm-settings";
+import {
   connectGoogleCalendar,
   getSession,
   onAuthChange,
@@ -37,7 +44,14 @@ import {
   GoogleCalendarError,
   importGoogleCalendar,
 } from "./google-calendar.ts";
-import { requestAlarmPermissions } from "./notifications";
+import {
+  requestAlarmPermissions,
+  syncScheduleNotifications,
+} from "./notifications";
+import {
+  registerScheduleWidgetActions,
+  syncScheduleWidget,
+} from "./schedule-widget";
 import { useScheduleStore } from "./store";
 import type { AppView, RepeatType, Schedule } from "./types";
 
@@ -78,6 +92,19 @@ export function AlarmApp() {
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [permissionsReady, setPermissionsReady] = useState(false);
+  const [alarmSettings, setAlarmSettings] = useState(getAlarmSettings);
+
+  function updateAlarmSettings(settings: AlarmSettings) {
+    saveAlarmSettings(settings);
+    setAlarmSettings(settings);
+    void (async () => {
+      for (const schedule of store.schedules) {
+        await syncScheduleNotifications(schedule);
+      }
+    })().catch((error) =>
+      console.error("알림 설정을 적용할 수 없습니다.", error),
+    );
+  }
 
   useEffect(() => {
     let active = true;
@@ -121,6 +148,34 @@ export function AlarmApp() {
       void removeNativeListener();
     };
   }, [setOwner]);
+
+  useEffect(() => {
+    if (store.ready) {
+      void syncScheduleWidget(store.schedules).catch((error) =>
+        console.error("위젯을 갱신할 수 없습니다.", error),
+      );
+    }
+  }, [store.ready, store.schedules]);
+
+  useEffect(() => {
+    if (!store.ready) return;
+    let removeListener: () => void | Promise<void> = () => undefined;
+    void registerScheduleWidgetActions({
+      onAdd: () => openForm(),
+      onSetAlarm: async (id, enabled) => {
+        const state = useScheduleStore.getState();
+        const schedule = state.schedules.find((item) => item.id === id);
+        if (!schedule || schedule.alarmEnabled === enabled) return;
+        await state.toggleAlarm(id);
+        if (enabled && canUseDeviceAlarm()) {
+          await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
+        }
+      },
+    }).then((remove) => {
+      removeListener = remove;
+    });
+    return () => void removeListener();
+  }, [store.ready]);
 
   const daySchedules = useMemo(
     () =>
@@ -235,6 +290,8 @@ export function AlarmApp() {
             session={session}
             syncError={store.syncError}
             onImportCalendar={importCalendar}
+            alarmSettings={alarmSettings}
+            onAlarmSettingsChange={updateAlarmSettings}
           />
         )}
       </main>
@@ -247,6 +304,7 @@ export function AlarmApp() {
         <ScheduleForm
           initial={editing}
           date={selectedDate.format("YYYY-MM-DD")}
+          alarmSettings={alarmSettings}
           onClose={() => setFormOpen(false)}
           onSave={async (schedule) => {
             await store.upsert(schedule);
@@ -697,12 +755,15 @@ function SettingsView({
   session,
   syncError,
   onImportCalendar,
+  alarmSettings,
+  onAlarmSettingsChange,
 }: {
   session: Session | null;
   syncError: string | null;
   onImportCalendar: () => Promise<number | null>;
+  alarmSettings: AlarmSettings;
+  onAlarmSettingsChange: (settings: AlarmSettings) => void;
 }) {
-  const [vibration, setVibration] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [calendarBusy, setCalendarBusy] = useState(false);
@@ -789,27 +850,22 @@ function SettingsView({
           )}
         </div>
         <SettingSelect
-          title="기본 사전 알림"
-          note="새 일정에 적용됩니다"
-          options={["정시", "5분 전", "10분 전", "30분 전"]}
-          defaultValue="10분 전"
+          title="알람 방식"
+          note="새로 추가하는 시계 알람에 적용됩니다"
+          options={[
+            { value: "sound-vibration", label: "소리 및 진동" },
+            { value: "sound", label: "소리" },
+            { value: "vibration", label: "진동" },
+            { value: "silent", label: "무음" },
+          ]}
+          value={alarmSettings.mode}
+          onChange={(value) =>
+            onAlarmSettingsChange({
+              ...alarmSettings,
+              mode: value as AlarmMode,
+            })
+          }
         />
-        <SettingSelect
-          title="다시 알림 간격"
-          note="알람 화면의 다시 알림"
-          options={["5분", "10분", "15분"]}
-          defaultValue="5분"
-        />
-        <div className="setting-row">
-          <span>
-            <strong>진동</strong>
-            <small>소리와 함께 진동합니다</small>
-          </span>
-          <Switch
-            checked={vibration}
-            onChange={() => setVibration(!vibration)}
-          />
-        </div>
         <div className="setting-row">
           <span>
             <strong>데이터 백업</strong>
@@ -851,12 +907,14 @@ function SettingSelect({
   title,
   note,
   options,
-  defaultValue,
+  value,
+  onChange,
 }: {
   title: string;
   note: string;
-  options: string[];
-  defaultValue: string;
+  options: Array<{ value: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <label>
@@ -864,9 +922,11 @@ function SettingSelect({
         <strong>{title}</strong>
         <small>{note}</small>
       </span>
-      <select defaultValue={defaultValue}>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
-          <option key={option}>{option}</option>
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
     </label>
@@ -895,12 +955,14 @@ function Switch({
 function ScheduleForm({
   initial,
   date,
+  alarmSettings,
   onClose,
   onSave,
   onDelete,
 }: {
   initial: Schedule | null;
   date: string;
+  alarmSettings: AlarmSettings;
   onClose: () => void;
   onSave: (schedule: Schedule) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -912,21 +974,16 @@ function ScheduleForm({
   const [importantMemo, setImportantMemo] = useState(
     initial?.importantMemo ?? "",
   );
-  const [before, setBefore] = useState(initial?.notifyBeforeMinutes[0] ?? 10);
+  const [before, setBefore] = useState(initial?.notifyBeforeMinutes[0] ?? 0);
   const [repeat, setRepeat] = useState<RepeatType>(initial?.repeat ?? "none");
   const [alarmEnabled, setAlarmEnabled] = useState(
     initial?.alarmEnabled ?? true,
-  );
-  const [soundEnabled, setSoundEnabled] = useState(
-    initial?.soundEnabled ?? true,
-  );
-  const [vibrationEnabled, setVibrationEnabled] = useState(
-    initial?.vibrationEnabled ?? true,
   );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!title.trim()) return;
+    const alarmMode = alarmModeFlags(alarmSettings.mode);
     await onSave({
       id: initial?.id ?? crypto.randomUUID(),
       date: scheduleDate,
@@ -937,8 +994,7 @@ function ScheduleForm({
       alarmEnabled,
       notifyBeforeMinutes: [before],
       repeat,
-      soundEnabled,
-      vibrationEnabled,
+      ...alarmMode,
       completed: initial?.completed ?? false,
       createdAt: initial?.createdAt ?? new Date().toISOString(),
     });
@@ -1051,16 +1107,6 @@ function ScheduleForm({
               label="알람"
               checked={alarmEnabled}
               onChange={setAlarmEnabled}
-            />
-            <Toggle
-              label="소리"
-              checked={soundEnabled}
-              onChange={setSoundEnabled}
-            />
-            <Toggle
-              label="진동"
-              checked={vibrationEnabled}
-              onChange={setVibrationEnabled}
             />
           </div>
           <footer>

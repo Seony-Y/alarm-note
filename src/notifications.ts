@@ -4,6 +4,7 @@ import {
   type Schedule as NotificationSchedule,
   Weekday,
 } from "@capacitor/local-notifications";
+import { alarmModeFlags, getAlarmSettings } from "./alarm-settings";
 import type { Schedule } from "./types";
 
 function notificationId(scheduleId: string, reminderIndex: number, slot = 0) {
@@ -95,6 +96,7 @@ export async function syncScheduleNotifications(schedule: Schedule) {
   if (!(await requestAlarmPermissions())) return;
 
   const startsAt = new Date(`${schedule.date}T${schedule.time}:00`);
+  const alarmMode = alarmModeFlags(getAlarmSettings().mode);
   const notifications = schedule.notifyBeforeMinutes.flatMap(
     (minutes, reminderIndex) =>
       notificationSchedules(schedule, startsAt, minutes).map(
@@ -106,7 +108,7 @@ export async function syncScheduleNotifications(schedule: Schedule) {
               ? "일정 시간이 되었습니다."
               : `${minutes}분 후 일정이 시작됩니다.`,
           schedule: notificationSchedule,
-          sound: schedule.soundEnabled ? "default" : undefined,
+          sound: alarmMode.soundEnabled ? "default" : undefined,
           extra: { scheduleId: schedule.id },
         }),
       ),
