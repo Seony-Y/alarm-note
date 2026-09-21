@@ -69,7 +69,7 @@ export async function syncScheduleWidget(schedules: Schedule[]) {
 
 export async function registerScheduleWidgetActions(actions: {
   onAdd: (date: string | null) => void;
-  onSetAlarm: (id: string, enabled: boolean) => Promise<void>;
+  onOpenAlarms: (date: string | null) => void;
 }) {
   if (Capacitor.getPlatform() !== "android") return () => undefined;
 
@@ -82,10 +82,8 @@ export async function registerScheduleWidgetActions(actions: {
       actions.onAdd(parsed.searchParams.get("date"));
       return;
     }
-    if (parsed.pathname === "/alarm") {
-      const id = parsed.searchParams.get("id");
-      const enabled = parsed.searchParams.get("enabled");
-      if (id && enabled) await actions.onSetAlarm(id, enabled === "true");
+    if (parsed.pathname === "/alarms") {
+      actions.onOpenAlarms(parsed.searchParams.get("date"));
     }
   }
 

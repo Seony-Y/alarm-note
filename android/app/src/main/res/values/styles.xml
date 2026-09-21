@@ -25,7 +25,7 @@
         <item name="android:layout_height">28dp</item>
         <item name="android:background">@drawable/widget_nav_background</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#F4F5F7</item>
+        <item name="android:textColor">#242321</item>
         <item name="android:textSize">20sp</item>
     </style>
 
@@ -36,44 +36,51 @@
         <item name="android:orientation">horizontal</item>
     </style>
 
+    <style name="WidgetCalendarCell">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+    </style>
+
     <style name="WidgetWeekday">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#D5D8DE</item>
+        <item name="android:textColor">#77736D</item>
         <item name="android:textSize">9sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
     <style name="WidgetWeekdaySunday" parent="WidgetWeekday">
-        <item name="android:textColor">#E74D59</item>
+        <item name="android:textColor">#D74A3A</item>
     </style>
 
     <style name="WidgetWeekdaySaturday" parent="WidgetWeekday">
-        <item name="android:textColor">#4C9BE8</item>
+        <item name="android:textColor">#3976B8</item>
     </style>
 
     <style name="WidgetCalendarDay">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:layout_weight">1</item>
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_gravity">center</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#E2E4E8</item>
+        <item name="android:lines">2</item>
+        <item name="android:lineSpacingExtra">-3dp</item>
+        <item name="android:textColor">#242321</item>
         <item name="android:textSize">9sp</item>
     </style>
 
     <style name="WidgetAlarmRow">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">0dp</item>
-        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">42dp</item>
     </style>
 
     <style name="WidgetAlarmTime">
         <item name="android:layout_width">48dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:gravity">center_vertical</item>
-        <item name="android:textColor">#F4F5F7</item>
+        <item name="android:textColor">#242321</item>
         <item name="android:textSize">11sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -86,7 +93,7 @@
         <item name="android:ellipsize">end</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:maxLines">1</item>
-        <item name="android:textColor">#C7CBD2</item>
+        <item name="android:textColor">#5E5A54</item>
         <item name="android:textSize">11sp</item>
     </style>
 
@@ -111,7 +118,7 @@
         <item name="android:background">@drawable/widget_toggle_off</item>
         <item name="android:gravity">center</item>
         <item name="android:text">@string/widget_alarm_off</item>
-        <item name="android:textColor">#A8ADB7</item>
+        <item name="android:textColor">#77736D</item>
         <item name="android:textSize">9sp</item>
         <item name="android:textStyle">bold</item>
     </style>

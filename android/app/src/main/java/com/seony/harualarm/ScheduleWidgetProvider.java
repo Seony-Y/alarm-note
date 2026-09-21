@@ -9,6 +9,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.RelativeSizeSpan;
 import android.view.View;
 import android.widget.RemoteViews;
 import java.text.SimpleDateFormat;
@@ -109,7 +112,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         );
         views.setOnClickPendingIntent(
             R.id.widget_add,
-            widgetAction(context, "new", null, false, selectedDate, 10)
+            widgetAction(context, "new", selectedDate, 10)
         );
         views.setOnClickPendingIntent(
             R.id.widget_previous_month,
@@ -145,8 +148,18 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             boolean isToday = date.equals(today);
             boolean inMonth = firstDay.get(Calendar.MONTH) == visibleMonth;
             int dayOfWeek = firstDay.get(Calendar.DAY_OF_WEEK);
-            String marker = hasSchedule(items, date) ? "·" : "";
-            views.setTextViewText(DAY_IDS[index], firstDay.get(Calendar.DAY_OF_MONTH) + marker);
+            boolean hasSchedule = hasSchedule(items, date);
+            String dayText = firstDay.get(Calendar.DAY_OF_MONTH) + "\n" + (hasSchedule ? "●" : " ");
+            SpannableString styledDay = new SpannableString(dayText);
+            if (hasSchedule) {
+                styledDay.setSpan(
+                    new RelativeSizeSpan(0.55f),
+                    dayText.length() - 1,
+                    dayText.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+            views.setTextViewText(DAY_IDS[index], styledDay);
             views.setInt(
                 DAY_IDS[index],
                 "setBackgroundResource",
@@ -157,7 +170,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             views.setTextColor(
                 DAY_IDS[index],
                 selected
-                    ? Color.parseColor("#191C22")
+                    ? Color.WHITE
                     : calendarTextColor(dayOfWeek, inMonth)
             );
             views.setOnClickPendingIntent(
@@ -185,16 +198,15 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             views.setViewVisibility(ROW_IDS[row], View.VISIBLE);
             views.setViewVisibility(TOGGLE_ON_IDS[row], enabled ? View.VISIBLE : View.GONE);
             views.setViewVisibility(TOGGLE_OFF_IDS[row], enabled ? View.GONE : View.VISIBLE);
-            PendingIntent toggle = widgetAction(
+            PendingIntent openAlarms = widgetAction(
                 context,
-                "alarm",
-                item.optString("id"),
-                !enabled,
+                "alarms",
                 selectedDate,
                 100 + row
             );
-            views.setOnClickPendingIntent(TOGGLE_ON_IDS[row], toggle);
-            views.setOnClickPendingIntent(TOGGLE_OFF_IDS[row], toggle);
+            views.setOnClickPendingIntent(ROW_IDS[row], openAlarms);
+            views.setOnClickPendingIntent(TOGGLE_ON_IDS[row], openAlarms);
+            views.setOnClickPendingIntent(TOGGLE_OFF_IDS[row], openAlarms);
             row++;
         }
 
@@ -228,8 +240,6 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
     private static PendingIntent widgetAction(
         Context context,
         String path,
-        String id,
-        boolean enabled,
         String date,
         int requestCode
     ) {
@@ -238,10 +248,6 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             .authority("widget")
             .appendPath(path)
             .appendQueryParameter("date", date);
-        if (id != null) {
-            uri.appendQueryParameter("id", id);
-            uri.appendQueryParameter("enabled", Boolean.toString(enabled));
-        }
         Intent intent = new Intent(Intent.ACTION_VIEW, uri.build(), context, MainActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return PendingIntent.getActivity(
@@ -296,9 +302,9 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
     }
 
     private static int calendarTextColor(int dayOfWeek, boolean inMonth) {
-        if (!inMonth) return Color.parseColor("#5E636D");
-        if (dayOfWeek == Calendar.SUNDAY) return Color.parseColor("#E74D59");
-        if (dayOfWeek == Calendar.SATURDAY) return Color.parseColor("#4C9BE8");
-        return Color.parseColor("#E2E4E8");
+        if (!inMonth) return Color.parseColor("#BBB7B1");
+        if (dayOfWeek == Calendar.SUNDAY) return Color.parseColor("#D74A3A");
+        if (dayOfWeek == Calendar.SATURDAY) return Color.parseColor("#3976B8");
+        return Color.parseColor("#242321");
     }
 }

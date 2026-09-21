@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import "dayjs/locale/ko";
 import Holidays from "date-holidays";
 import {
@@ -165,14 +165,9 @@ export function AlarmApp() {
         if (date && dayjs(date).isValid()) setSelectedDate(dayjs(date));
         openForm();
       },
-      onSetAlarm: async (id, enabled) => {
-        const state = useScheduleStore.getState();
-        const schedule = state.schedules.find((item) => item.id === id);
-        if (!schedule || schedule.alarmEnabled === enabled) return;
-        await state.toggleAlarm(id);
-        if (enabled && canUseDeviceAlarm()) {
-          await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
-        }
+      onOpenAlarms: (date) => {
+        if (date && dayjs(date).isValid()) setSelectedDate(dayjs(date));
+        setView("alarms");
       },
     }).then((remove) => {
       removeListener = remove;
@@ -286,7 +281,12 @@ export function AlarmApp() {
           />
         )}
         {view === "alarms" && (
-          <AlarmView schedules={store.schedules} onToggle={toggleAlarm} />
+          <AlarmView
+            key={selectedDate.format("YYYY-MM")}
+            schedules={store.schedules}
+            selectedDate={selectedDate}
+            onToggle={toggleAlarm}
+          />
         )}
         {view === "settings" && (
           <SettingsView
@@ -689,12 +689,14 @@ function CalendarView({
 
 function AlarmView({
   schedules,
+  selectedDate,
   onToggle,
 }: {
   schedules: Schedule[];
+  selectedDate: Dayjs;
   onToggle: (id: string) => Promise<void>;
 }) {
-  const [month, setMonth] = useState(dayjs().startOf("month"));
+  const [month, setMonth] = useState(selectedDate.startOf("month"));
   const alarms = schedules
     .filter(
       (item) => !item.completed && dayjs(item.date).isSame(month, "month"),
