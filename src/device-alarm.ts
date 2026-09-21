@@ -8,6 +8,8 @@ interface DeviceAlarmPlugin {
     minute: number;
     message: string;
     days?: number[];
+    soundEnabled: boolean;
+    vibrationEnabled: boolean;
   }): Promise<void>;
 }
 
@@ -37,5 +39,7 @@ export async function addScheduleToDeviceAlarm(schedule: Schedule) {
     minute,
     message: `${schedule.date} ${schedule.title}`,
     days: repeatDays(schedule),
+    soundEnabled: schedule.soundEnabled,
+    vibrationEnabled: schedule.vibrationEnabled,
   });
 }

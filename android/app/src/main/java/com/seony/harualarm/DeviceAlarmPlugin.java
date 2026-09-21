@@ -17,6 +17,8 @@ public class DeviceAlarmPlugin extends Plugin {
         Integer hour = call.getInt("hour");
         Integer minute = call.getInt("minute");
         String message = call.getString("message", "하루알람");
+        Boolean soundEnabled = call.getBoolean("soundEnabled", true);
+        Boolean vibrationEnabled = call.getBoolean("vibrationEnabled", true);
 
         if (hour == null || minute == null) {
             call.reject("알람 시간이 필요합니다.");
@@ -27,7 +29,12 @@ public class DeviceAlarmPlugin extends Plugin {
             .putExtra(AlarmClock.EXTRA_HOUR, hour)
             .putExtra(AlarmClock.EXTRA_MINUTES, minute)
             .putExtra(AlarmClock.EXTRA_MESSAGE, message)
+            .putExtra(AlarmClock.EXTRA_VIBRATE, vibrationEnabled)
             .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+
+        if (!soundEnabled) {
+            intent.putExtra(AlarmClock.EXTRA_RINGTONE, AlarmClock.VALUE_RINGTONE_SILENT);
+        }
 
         JSArray days = call.getArray("days");
         if (days != null && days.length() > 0) {
