@@ -27,7 +27,7 @@ public class DeviceAlarmPlugin extends Plugin {
             .putExtra(AlarmClock.EXTRA_HOUR, hour)
             .putExtra(AlarmClock.EXTRA_MINUTES, minute)
             .putExtra(AlarmClock.EXTRA_MESSAGE, message)
-            .putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
 
         JSArray days = call.getArray("days");
         if (days != null && days.length() > 0) {

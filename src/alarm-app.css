@@ -306,6 +306,7 @@ h2 {
 .check-button {
   width: 21px;
   height: 21px;
+  padding: 0;
   border: 1.5px solid #c9c5bf;
   border-radius: 50%;
   background: white;
@@ -313,9 +314,15 @@ h2 {
   display: grid;
   place-items: center;
 }
+.check-button img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
 .completed .check-button {
-  background: var(--orange);
-  border-color: var(--orange);
+  background: transparent;
+  border: 0;
 }
 .schedule-copy {
   align-self: stretch;
@@ -493,30 +500,36 @@ h2 {
   gap: 7px;
   align-items: center;
 }
+.alarm-month-toolbar {
+  min-height: 52px;
+  margin: 12px 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border-block: 1px solid var(--line);
+}
+.alarm-month-toolbar strong {
+  min-width: 110px;
+  text-align: center;
+  font-size: 16px;
+}
 .alarm-list {
   border-top: 1px solid var(--ink);
 }
 .alarm-list article {
   display: grid;
-  grid-template-columns: 115px 1fr auto auto;
+  grid-template-columns: 115px 1fr auto;
   gap: 22px;
   align-items: center;
   min-height: 94px;
   border-bottom: 1px solid var(--line);
 }
-.device-alarm-button {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--orange-soft);
-  color: var(--orange-dark);
-}
-.device-alarm-message {
-  margin: -16px 0 20px;
-  color: var(--orange-dark);
-  font-size: 13px;
+.alarm-empty {
+  padding: 64px 20px;
+  text-align: center;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
 }
 .alarm-time,
 .alarm-info {
@@ -596,6 +609,14 @@ textarea {
   padding: 8px 12px;
 }
 .account-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.account-button svg {
   flex: 0 0 auto;
 }
 .calendar-actions {
@@ -830,7 +851,7 @@ textarea {
     background: var(--orange);
   }
   .alarm-list article {
-    grid-template-columns: 70px 1fr auto auto;
+    grid-template-columns: 70px 1fr auto;
     gap: 12px;
   }
   .alarm-time strong {
@@ -870,13 +891,6 @@ textarea {
   }
   .alarm-list article {
     grid-template-columns: 62px 1fr auto;
-  }
-  .device-alarm-button {
-    grid-column: 2 / 4;
-    width: 100%;
-    height: 34px;
-    margin-bottom: 12px;
-    border-radius: 6px;
   }
   .permission-row {
     align-items: flex-start;

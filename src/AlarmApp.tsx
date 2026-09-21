@@ -8,7 +8,6 @@ import {
   BellOff,
   CalendarDays,
   CalendarPlus,
-  Check,
   ChevronLeft,
   ChevronRight,
   Cloud,
@@ -18,12 +17,12 @@ import {
   Plus,
   Settings,
   ShieldCheck,
-  Smartphone,
   Star,
   Trash2,
   X,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
+import checkIcon from "./assets/check.png";
 import clockIcon from "./assets/clock.png";
 import {
   connectGoogleCalendar,
@@ -133,6 +132,14 @@ export function AlarmApp() {
     setFormOpen(true);
   }
 
+  async function toggleAlarm(id: string) {
+    const schedule = store.schedules.find((item) => item.id === id);
+    await store.toggleAlarm(id);
+    if (schedule && !schedule.alarmEnabled && canUseDeviceAlarm()) {
+      await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
+    }
+  }
+
   async function importCalendar() {
     if (!session?.provider_token) {
       throw new Error("Google Calendar 권한을 다시 연결해 주세요.");
@@ -191,7 +198,7 @@ export function AlarmApp() {
             onAdd={() => openForm()}
             onEdit={openForm}
             onComplete={store.toggleCompleted}
-            onAlarm={store.toggleAlarm}
+            onAlarm={toggleAlarm}
           />
         )}
         {view === "calendar" && (
@@ -205,11 +212,7 @@ export function AlarmApp() {
           />
         )}
         {view === "alarms" && (
-          <AlarmView
-            schedules={store.schedules}
-            onToggle={store.toggleAlarm}
-            onDeviceAlarm={addScheduleToDeviceAlarm}
-          />
+          <AlarmView schedules={store.schedules} onToggle={toggleAlarm} />
         )}
         {view === "settings" && (
           <SettingsView
@@ -232,6 +235,9 @@ export function AlarmApp() {
           onClose={() => setFormOpen(false)}
           onSave={async (schedule) => {
             await store.upsert(schedule);
+            if (schedule.alarmEnabled && canUseDeviceAlarm()) {
+              await addScheduleToDeviceAlarm(schedule);
+            }
             setFormOpen(false);
           }}
           onDelete={
@@ -443,7 +449,7 @@ function TodayView({
                   aria-label="완료 상태 변경"
                   onClick={() => void onComplete(schedule.id)}
                 >
-                  {schedule.completed && <Check size={14} />}
+                  {schedule.completed && <img src={checkIcon} alt="" />}
                 </button>
                 <button
                   className="schedule-copy"
@@ -616,15 +622,16 @@ function CalendarView({
 function AlarmView({
   schedules,
   onToggle,
-  onDeviceAlarm,
 }: {
   schedules: Schedule[];
   onToggle: (id: string) => Promise<void>;
-  onDeviceAlarm: (schedule: Schedule) => Promise<void>;
 }) {
-  const [deviceMessage, setDeviceMessage] = useState<string | null>(null);
+  const [month, setMonth] = useState(dayjs().startOf("month"));
   const alarms = schedules
-    .filter((item) => !item.completed)
+    .filter(
+      (item) =>
+        !item.completed && dayjs(item.date).isSame(month, "month"),
+    )
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   return (
     <>
@@ -634,50 +641,47 @@ function AlarmView({
           {alarms.filter((item) => item.alarmEnabled).length}개 활성
         </div>
       </PageHeader>
-      {deviceMessage && <p className="device-alarm-message">{deviceMessage}</p>}
+      <div className="alarm-month-toolbar">
+        <button
+          className="icon-button"
+          onClick={() => setMonth(month.subtract(1, "month"))}
+          aria-label="이전 달"
+        >
+          <ChevronLeft />
+        </button>
+        <strong>{month.format("YYYY년 M월")}</strong>
+        <button
+          className="icon-button"
+          onClick={() => setMonth(month.add(1, "month"))}
+          aria-label="다음 달"
+        >
+          <ChevronRight />
+        </button>
+      </div>
       <section className="alarm-list">
-        {alarms.map((item) => (
-          <article key={item.id}>
-            <div className="alarm-time">
-              <strong>{item.time}</strong>
-              <span>{dayjs(item.date).format("M월 D일 ddd")}</span>
-            </div>
-            <div className="alarm-info">
-              <strong>{item.title}</strong>
-              <span>
-                {item.notifyBeforeMinutes.map(reminderLabel).join(", ")} ·{" "}
-                {repeatLabels[item.repeat]}
-              </span>
-            </div>
-            <Switch
-              checked={item.alarmEnabled}
-              onChange={() => void onToggle(item.id)}
-            />
-            {canUseDeviceAlarm() && (
-              <button
-                className="device-alarm-button"
-                aria-label={`${item.title} 휴대폰 알람에 추가`}
-                title="휴대폰 알람에 추가"
-                onClick={async () => {
-                  try {
-                    await onDeviceAlarm(item);
-                    setDeviceMessage(
-                      "휴대폰 시계 앱에서 알람을 확인해 주세요.",
-                    );
-                  } catch (error) {
-                    setDeviceMessage(
-                      error instanceof Error
-                        ? error.message
-                        : "휴대폰 알람을 열 수 없습니다.",
-                    );
-                  }
-                }}
-              >
-                <Smartphone size={18} />
-              </button>
-            )}
-          </article>
-        ))}
+        {alarms.length ? (
+          alarms.map((item) => (
+            <article key={item.id}>
+              <div className="alarm-time">
+                <strong>{item.time}</strong>
+                <span>{dayjs(item.date).format("M월 D일 ddd")}</span>
+              </div>
+              <div className="alarm-info">
+                <strong>{item.title}</strong>
+                <span>
+                  {item.notifyBeforeMinutes.map(reminderLabel).join(", ")} ·{" "}
+                  {repeatLabels[item.repeat]}
+                </span>
+              </div>
+              <Switch
+                checked={item.alarmEnabled}
+                onChange={() => void onToggle(item.id)}
+              />
+            </article>
+          ))
+        ) : (
+          <p className="alarm-empty">이 달에 등록된 알람이 없습니다.</p>
+        )}
       </section>
     </>
   );
