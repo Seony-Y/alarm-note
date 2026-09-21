@@ -920,11 +920,11 @@ function SettingsView({
           <span>
             <strong>Google Calendar</strong>
             <small>
-              {calendarMessage ??
-                (lastCalendarImport
-                  ? `최신 업데이트: ${dayjs(lastCalendarImport).format("YYYY.MM.DD HH:mm")}`
-                  : "앞으로 90일의 일정을 가져옵니다")}
+              {lastCalendarImport
+                ? `최신 업데이트: ${dayjs(lastCalendarImport).format("YYYY.MM.DD HH:mm")}`
+                : "최신 업데이트: 없음"}
             </small>
+            <small>{calendarMessage ?? "앞으로 90일의 일정을 가져옵니다"}</small>
           </span>
           <div className="calendar-actions">
             <button
