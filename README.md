@@ -8,7 +8,7 @@
 
 시간순으로 오늘 일정을 확인하고 완료 여부와 알람 상태를 바로 관리합니다. 놓치면 안 되는 내용은 **중요 메모**로 화면 상단과 일정에 함께 강조됩니다.
 
-![오늘 일정과 중요 메모 화면](store-screenshots/play-store-1080x1920/02-today.png)
+![오늘 일정과 중요 메모 화면](store-screenshots/02-today-readme.png)
 
 ### 계획하고, 알림 받기
 
