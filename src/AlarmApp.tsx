@@ -161,7 +161,10 @@ export function AlarmApp() {
     if (!store.ready) return;
     let removeListener: () => void | Promise<void> = () => undefined;
     void registerScheduleWidgetActions({
-      onAdd: () => openForm(),
+      onAdd: (date) => {
+        if (date && dayjs(date).isValid()) setSelectedDate(dayjs(date));
+        openForm();
+      },
       onSetAlarm: async (id, enabled) => {
         const state = useScheduleStore.getState();
         const schedule = state.schedules.find((item) => item.id === id);

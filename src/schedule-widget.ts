@@ -17,53 +17,58 @@ interface ScheduleWidgetPlugin {
 
 const ScheduleWidget = registerPlugin<ScheduleWidgetPlugin>("ScheduleWidget");
 
-function nextOccurrence(schedule: Schedule, now: Dayjs) {
-  const start = dayjs(`${schedule.date}T${schedule.time}:00`);
-  if (schedule.repeat === "none") return start.isAfter(now) ? start : null;
-
-  let candidate = now.startOf("day").hour(start.hour()).minute(start.minute());
-  if (candidate.isBefore(start)) candidate = start;
-
-  for (let offset = 0; offset < 8; offset += 1) {
-    const occurrence = candidate.add(offset, "day");
-    const matches =
-      schedule.repeat === "daily" ||
-      (schedule.repeat === "weekdays" &&
-        occurrence.day() >= 1 &&
-        occurrence.day() <= 5) ||
-      (schedule.repeat === "weekly" && occurrence.day() === start.day());
-    if (matches && occurrence.isAfter(now)) return occurrence;
+function occursOn(schedule: Schedule, date: Dayjs) {
+  const start = dayjs(schedule.date).startOf("day");
+  if (date.isBefore(start, "day")) return false;
+  if (schedule.repeat === "none") return date.isSame(start, "day");
+  if (schedule.repeat === "daily") return true;
+  if (schedule.repeat === "weekdays") {
+    return date.day() >= 1 && date.day() <= 5;
   }
-  return null;
+  return date.day() === start.day();
 }
 
 export async function syncScheduleWidget(schedules: Schedule[]) {
   if (Capacitor.getPlatform() !== "android") return;
 
-  const now = dayjs();
+  const windowStart = dayjs().startOf("month");
+  const windowEnd = windowStart.add(13, "month");
+  const itemsPerDate = new Map<string, number>();
   const items = schedules
     .filter((schedule) => !schedule.completed)
-    .map((schedule) => ({ schedule, at: nextOccurrence(schedule, now) }))
-    .filter((item): item is { schedule: Schedule; at: Dayjs } => Boolean(item.at))
-    .sort((left, right) => left.at.valueOf() - right.at.valueOf())
-    .slice(0, 2)
-    .map(({ schedule, at }) => ({
-      id: schedule.id,
-      date: at.isSame(now, "day")
-        ? "오늘"
-        : at.isSame(now.add(1, "day"), "day")
-          ? "내일"
-          : at.format("M월 D일 ddd"),
-      time: at.format("HH:mm"),
-      title: schedule.title,
-      enabled: schedule.alarmEnabled,
-    }));
+    .flatMap((schedule) => {
+      const occurrences = [];
+      for (
+        let date = windowStart;
+        date.isBefore(windowEnd, "day");
+        date = date.add(1, "day")
+      ) {
+        if (!occursOn(schedule, date)) continue;
+        occurrences.push({
+          id: schedule.id,
+          date: date.format("YYYY-MM-DD"),
+          time: schedule.time,
+          title: schedule.title,
+          enabled: schedule.alarmEnabled,
+        });
+      }
+      return occurrences;
+    })
+    .sort((left, right) =>
+      `${left.date}T${left.time}`.localeCompare(`${right.date}T${right.time}`),
+    )
+    .filter((item) => {
+      const count = itemsPerDate.get(item.date) ?? 0;
+      if (count >= 3) return false;
+      itemsPerDate.set(item.date, count + 1);
+      return true;
+    });
 
   await ScheduleWidget.update({ items });
 }
 
 export async function registerScheduleWidgetActions(actions: {
-  onAdd: () => void;
+  onAdd: (date: string | null) => void;
   onSetAlarm: (id: string, enabled: boolean) => Promise<void>;
 }) {
   if (Capacitor.getPlatform() !== "android") return () => undefined;
@@ -74,7 +79,7 @@ export async function registerScheduleWidgetActions(actions: {
       return;
     }
     if (parsed.pathname === "/new") {
-      actions.onAdd();
+      actions.onAdd(parsed.searchParams.get("date"));
       return;
     }
     if (parsed.pathname === "/alarm") {
