@@ -6,13 +6,30 @@ interface StoredSchedule extends Schedule {
   ownerId: string;
 }
 
-const database = openDB("haru-alarm", 2, {
-  upgrade(db) {
+const sampleScheduleIds = new Set(["sample-1", "sample-2", "sample-3"]);
+
+const database = openDB("haru-alarm", 3, {
+  async upgrade(db, oldVersion, _newVersion, transaction) {
     if (!db.objectStoreNames.contains("schedules")) {
       db.createObjectStore("schedules", { keyPath: "id" });
     }
     if (!db.objectStoreNames.contains("user-schedules")) {
       db.createObjectStore("user-schedules", { keyPath: "storageId" });
+    }
+    if (oldVersion < 3) {
+      const guestStore = transaction.objectStore("schedules");
+      await Promise.all(
+        [...sampleScheduleIds].map((id) => guestStore.delete(id)),
+      );
+
+      const userStore = transaction.objectStore("user-schedules");
+      let cursor = await userStore.openCursor();
+      while (cursor) {
+        if (sampleScheduleIds.has((cursor.value as StoredSchedule).id)) {
+          await cursor.delete();
+        }
+        cursor = await cursor.continue();
+      }
     }
   },
 });

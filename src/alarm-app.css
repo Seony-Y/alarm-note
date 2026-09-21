@@ -7,6 +7,94 @@
   --line: #e8e6e2;
   --surface: #fff;
 }
+.auth-screen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background-color: #fff8f1;
+  background-image:
+    linear-gradient(#f4d9c333 1px, transparent 1px),
+    linear-gradient(90deg, #f4d9c333 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.auth-panel,
+.permission-panel {
+  width: min(460px, 100%);
+  background: white;
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 70px #75300018;
+}
+.auth-panel {
+  padding: 48px;
+  text-align: center;
+}
+.auth-panel > img {
+  width: 112px;
+  height: 112px;
+  border-radius: 22px;
+  margin-bottom: 24px;
+}
+.auth-panel p,
+.permission-heading p {
+  margin-bottom: 6px;
+  color: var(--orange-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+.auth-panel h1 {
+  font-size: 38px;
+  margin-bottom: 14px;
+}
+.auth-panel > span {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.google-login {
+  width: 100%;
+  margin-top: 34px;
+}
+.auth-panel > small {
+  display: block;
+  margin-top: 14px;
+}
+.permission-panel {
+  padding: 38px;
+}
+.permission-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.permission-heading > svg {
+  color: var(--orange-dark);
+}
+.permission-heading h1 {
+  font-size: 27px;
+}
+.permission-row {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+}
+.permission-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.permission-row small {
+  color: var(--muted);
+}
+.permission-continue {
+  width: 100%;
+  margin-top: 24px;
+}
 .app-shell {
   width: min(1180px, 100%);
   min-height: 100vh;
@@ -410,11 +498,25 @@ h2 {
 }
 .alarm-list article {
   display: grid;
-  grid-template-columns: 115px 1fr auto;
+  grid-template-columns: 115px 1fr auto auto;
   gap: 22px;
   align-items: center;
   min-height: 94px;
   border-bottom: 1px solid var(--line);
+}
+.device-alarm-button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--orange-soft);
+  color: var(--orange-dark);
+}
+.device-alarm-message {
+  margin: -16px 0 20px;
+  color: var(--orange-dark);
+  font-size: 13px;
 }
 .alarm-time,
 .alarm-info {
@@ -494,6 +596,11 @@ textarea {
   padding: 8px 12px;
 }
 .account-button {
+  flex: 0 0 auto;
+}
+.calendar-actions {
+  display: flex;
+  gap: 8px;
   flex: 0 0 auto;
 }
 .setting-error {
@@ -626,6 +733,13 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .auth-screen {
+    padding: 18px;
+  }
+  .auth-panel,
+  .permission-panel {
+    padding: 30px 22px;
+  }
   .app-shell {
     display: block;
     min-height: 100svh;
@@ -716,7 +830,7 @@ textarea {
     background: var(--orange);
   }
   .alarm-list article {
-    grid-template-columns: 80px 1fr auto;
+    grid-template-columns: 70px 1fr auto auto;
     gap: 12px;
   }
   .alarm-time strong {
@@ -734,6 +848,13 @@ textarea {
     padding: 0;
     flex-direction: row;
   }
+  .setting-row {
+    align-items: flex-start;
+    padding: 18px 0;
+  }
+  .calendar-actions {
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 390px) {
@@ -746,5 +867,23 @@ textarea {
   }
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  .alarm-list article {
+    grid-template-columns: 62px 1fr auto;
+  }
+  .device-alarm-button {
+    grid-column: 2 / 4;
+    width: 100%;
+    height: 34px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+  }
+  .permission-row {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 0;
+  }
+  .permission-row button {
+    width: 100%;
   }
 }

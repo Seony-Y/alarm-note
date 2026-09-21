@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 
 const nativeRedirectUrl = "com.seony.harualarm://auth/callback";
 
-export async function signInWithGoogle() {
+async function startGoogleOAuth(scopes: string, requestConsent = false) {
   const isNative = Capacitor.isNativePlatform();
   const redirectTo = isNative ? nativeRedirectUrl : window.location.origin;
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -14,17 +14,30 @@ export async function signInWithGoogle() {
     options: {
       redirectTo,
       skipBrowserRedirect: isNative,
-      scopes:
-        "openid email profile https://www.googleapis.com/auth/calendar.events",
-      queryParams: {
-        access_type: "offline",
-        prompt: "consent",
-      },
+      scopes,
+      queryParams: requestConsent
+        ? {
+            access_type: "offline",
+            include_granted_scopes: "true",
+            prompt: "consent",
+          }
+        : { include_granted_scopes: "true" },
     },
   });
 
   if (error) throw error;
   if (isNative && data.url) await Browser.open({ url: data.url });
+}
+
+export function signInWithGoogle() {
+  return startGoogleOAuth("openid email profile");
+}
+
+export function connectGoogleCalendar() {
+  return startGoogleOAuth(
+    "openid email profile https://www.googleapis.com/auth/calendar.events.readonly",
+    true,
+  );
 }
 
 export async function signOut() {

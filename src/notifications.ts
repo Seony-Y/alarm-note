@@ -10,6 +10,19 @@ function notificationId(scheduleId: string, index: number) {
   return Math.abs(hash) || index + 1;
 }
 
+export async function requestAlarmPermissions() {
+  if (!Capacitor.isNativePlatform()) return true;
+
+  const permission = await LocalNotifications.requestPermissions();
+  if (permission.display !== "granted") return false;
+
+  const exactAlarm = await LocalNotifications.checkExactNotificationSetting();
+  if (exactAlarm.exact_alarm !== "granted") {
+    await LocalNotifications.changeExactNotificationSetting();
+  }
+  return true;
+}
+
 export async function syncScheduleNotifications(schedule: Schedule) {
   if (!Capacitor.isNativePlatform()) return;
 
@@ -19,13 +32,7 @@ export async function syncScheduleNotifications(schedule: Schedule) {
   if (ids.length) await LocalNotifications.cancel({ notifications: ids });
   if (!schedule.alarmEnabled || schedule.completed) return;
 
-  const permission = await LocalNotifications.requestPermissions();
-  if (permission.display !== "granted") return;
-
-  const exactAlarm = await LocalNotifications.checkExactNotificationSetting();
-  if (exactAlarm.exact_alarm !== "granted") {
-    await LocalNotifications.changeExactNotificationSetting();
-  }
+  if (!(await requestAlarmPermissions())) return;
 
   const startsAt = new Date(`${schedule.date}T${schedule.time}:00`);
   const notifications = schedule.notifyBeforeMinutes

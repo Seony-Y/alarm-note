@@ -17,6 +17,8 @@ import {
   LogOut,
   Plus,
   Settings,
+  ShieldCheck,
+  Smartphone,
   Star,
   Trash2,
   X,
@@ -24,13 +26,16 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import clockIcon from "./assets/clock.png";
 import {
+  connectGoogleCalendar,
   getSession,
   onAuthChange,
   registerNativeAuthCallback,
   signInWithGoogle,
   signOut,
 } from "./auth";
+import { addScheduleToDeviceAlarm, canUseDeviceAlarm } from "./device-alarm";
 import { importGoogleCalendar } from "./google-calendar.ts";
+import { requestAlarmPermissions } from "./notifications";
 import { useScheduleStore } from "./store";
 import type { AppView, RepeatType, Schedule } from "./types";
 
@@ -70,6 +75,7 @@ export function AlarmApp() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [permissionsReady, setPermissionsReady] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -82,12 +88,28 @@ export function AlarmApp() {
       if (!active) return;
       setSession(currentSession);
       await setOwner(currentSession?.user.id ?? null);
-      if (active) setAuthReady(true);
+      if (active) {
+        setPermissionsReady(
+          currentSession
+            ? localStorage.getItem(
+                `haru-alarm:permissions:${currentSession.user.id}`,
+              ) === "done"
+            : false,
+        );
+        setAuthReady(true);
+      }
     });
 
     const unsubscribe = onAuthChange((nextSession) => {
       if (!active) return;
       setSession(nextSession);
+      setPermissionsReady(
+        nextSession
+          ? localStorage.getItem(
+              `haru-alarm:permissions:${nextSession.user.id}`,
+            ) === "done"
+          : false,
+      );
       void setOwner(nextSession?.user.id ?? null);
     });
 
@@ -122,6 +144,19 @@ export function AlarmApp() {
 
   if (!authReady || !store.ready)
     return <main className="loading">하루를 준비하고 있어요.</main>;
+  if (!session) return <LoginView />;
+  if (!permissionsReady)
+    return (
+      <PermissionSetup
+        onComplete={() => {
+          localStorage.setItem(
+            `haru-alarm:permissions:${session.user.id}`,
+            "done",
+          );
+          setPermissionsReady(true);
+        }}
+      />
+    );
 
   return (
     <div className="app-shell">
@@ -170,13 +205,18 @@ export function AlarmApp() {
           />
         )}
         {view === "alarms" && (
-          <AlarmView schedules={store.schedules} onToggle={store.toggleAlarm} />
+          <AlarmView
+            schedules={store.schedules}
+            onToggle={store.toggleAlarm}
+            onDeviceAlarm={addScheduleToDeviceAlarm}
+          />
         )}
         {view === "settings" && (
           <SettingsView
             session={session}
             syncError={store.syncError}
             onImportCalendar={importCalendar}
+            onConnectCalendar={connectGoogleCalendar}
           />
         )}
       </main>
@@ -205,6 +245,100 @@ export function AlarmApp() {
         />
       )}
     </div>
+  );
+}
+
+function LoginView() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSignIn() {
+    setBusy(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (signInError) {
+      setError(
+        signInError instanceof Error
+          ? signInError.message
+          : "Google 로그인에 실패했습니다.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-screen">
+      <section className="auth-panel">
+        <img src={clockIcon} alt="" />
+        <p>나만의 일정과 알람</p>
+        <h1>하루알람</h1>
+        <span>Google 계정으로 로그인하면 내 일정만 안전하게 불러옵니다.</span>
+        <button
+          className="primary google-login"
+          disabled={busy}
+          onClick={() => void handleSignIn()}
+        >
+          <LogIn size={19} />
+          {busy ? "연결 중" : "Google로 간편 로그인"}
+        </button>
+        {error && <small className="setting-error">{error}</small>}
+      </section>
+    </main>
+  );
+}
+
+function PermissionSetup({ onComplete }: { onComplete: () => void }) {
+  const [notificationMessage, setNotificationMessage] = useState(
+    "정확한 시간에 알람을 받으려면 필요합니다.",
+  );
+
+  async function allowNotifications() {
+    const granted = await requestAlarmPermissions();
+    setNotificationMessage(
+      granted ? "알림 권한이 허용되었습니다." : "알림 권한이 필요합니다.",
+    );
+  }
+
+  return (
+    <main className="auth-screen">
+      <section className="permission-panel">
+        <div className="permission-heading">
+          <ShieldCheck size={30} />
+          <div>
+            <p>로그인 완료</p>
+            <h1>사용 권한을 설정하세요</h1>
+          </div>
+        </div>
+        <div className="permission-row">
+          <span>
+            <strong>알림 및 정확한 알람</strong>
+            <small>{notificationMessage}</small>
+          </span>
+          <button
+            className="secondary"
+            onClick={() => void allowNotifications()}
+          >
+            허용
+          </button>
+        </div>
+        <div className="permission-row">
+          <span>
+            <strong>Google Calendar</strong>
+            <small>선택 사항이며 일정 가져오기에만 사용됩니다.</small>
+          </span>
+          <button
+            className="secondary"
+            onClick={() => void connectGoogleCalendar()}
+          >
+            연결
+          </button>
+        </div>
+        <button className="primary permission-continue" onClick={onComplete}>
+          하루알람 시작하기
+        </button>
+      </section>
+    </main>
   );
 }
 
@@ -482,10 +616,13 @@ function CalendarView({
 function AlarmView({
   schedules,
   onToggle,
+  onDeviceAlarm,
 }: {
   schedules: Schedule[];
   onToggle: (id: string) => Promise<void>;
+  onDeviceAlarm: (schedule: Schedule) => Promise<void>;
 }) {
+  const [deviceMessage, setDeviceMessage] = useState<string | null>(null);
   const alarms = schedules
     .filter((item) => !item.completed)
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
@@ -497,6 +634,7 @@ function AlarmView({
           {alarms.filter((item) => item.alarmEnabled).length}개 활성
         </div>
       </PageHeader>
+      {deviceMessage && <p className="device-alarm-message">{deviceMessage}</p>}
       <section className="alarm-list">
         {alarms.map((item) => (
           <article key={item.id}>
@@ -515,6 +653,29 @@ function AlarmView({
               checked={item.alarmEnabled}
               onChange={() => void onToggle(item.id)}
             />
+            {canUseDeviceAlarm() && (
+              <button
+                className="device-alarm-button"
+                aria-label={`${item.title} 휴대폰 알람에 추가`}
+                title="휴대폰 알람에 추가"
+                onClick={async () => {
+                  try {
+                    await onDeviceAlarm(item);
+                    setDeviceMessage(
+                      "휴대폰 시계 앱에서 알람을 확인해 주세요.",
+                    );
+                  } catch (error) {
+                    setDeviceMessage(
+                      error instanceof Error
+                        ? error.message
+                        : "휴대폰 알람을 열 수 없습니다.",
+                    );
+                  }
+                }}
+              >
+                <Smartphone size={18} />
+              </button>
+            )}
           </article>
         ))}
       </section>
@@ -526,10 +687,12 @@ function SettingsView({
   session,
   syncError,
   onImportCalendar,
+  onConnectCalendar,
 }: {
   session: Session | null;
   syncError: string | null;
   onImportCalendar: () => Promise<number>;
+  onConnectCalendar: () => Promise<void>;
 }) {
   const [vibration, setVibration] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -658,14 +821,24 @@ function SettingsView({
               {calendarMessage ?? "앞으로 90일의 일정을 가져옵니다"}
             </small>
           </span>
-          <button
-            className="account-button secondary"
-            disabled={!session || calendarBusy}
-            onClick={() => void handleCalendarImport()}
-          >
-            <CalendarPlus size={17} />
-            {calendarBusy ? "가져오는 중" : "일정 가져오기"}
-          </button>
+          <div className="calendar-actions">
+            <button
+              className="account-button secondary"
+              disabled={!session || calendarBusy}
+              onClick={() => void onConnectCalendar()}
+            >
+              <LogIn size={17} />
+              권한 연결
+            </button>
+            <button
+              className="account-button secondary"
+              disabled={!session || calendarBusy}
+              onClick={() => void handleCalendarImport()}
+            >
+              <CalendarPlus size={17} />
+              {calendarBusy ? "가져오는 중" : "일정 가져오기"}
+            </button>
+          </div>
         </div>
       </section>
     </>
