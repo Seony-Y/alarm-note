@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.view.View;
 import android.widget.RemoteViews;
@@ -101,8 +102,19 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
     private static RemoteViews createViews(Context context) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.schedule_widget);
         SharedPreferences preferences = preferences(context);
+        boolean authenticated = preferences.getBoolean("authenticated", false);
         String selectedDate = preferences.getString(KEY_SELECTED_DATE, dateKey(Calendar.getInstance()));
         JSONArray items = readItems(preferences);
+
+        views.setViewVisibility(R.id.widget_content, authenticated ? View.VISIBLE : View.GONE);
+        views.setViewVisibility(R.id.widget_login, authenticated ? View.GONE : View.VISIBLE);
+        if (!authenticated) {
+            views.setOnClickPendingIntent(
+                R.id.widget_login,
+                widgetAction(context, "login", null, 9)
+            );
+            return views;
+        }
 
         populateCalendar(context, views, preferences, selectedDate, items);
         populateScheduleList(context, views, selectedDate, items);
@@ -154,6 +166,12 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             if (hasSchedule) {
                 styledDay.setSpan(
                     new RelativeSizeSpan(0.55f),
+                    dayText.length() - 1,
+                    dayText.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                styledDay.setSpan(
+                    new ForegroundColorSpan(Color.parseColor("#FF7A1A")),
                     dayText.length() - 1,
                     dayText.length(),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

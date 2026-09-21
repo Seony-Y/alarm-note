@@ -7,6 +7,7 @@
     <string name="widget_title">하루알람</string>
     <string name="widget_empty">예정된 알람이 없습니다</string>
     <string name="widget_empty_day">이 날짜에는 알람이 없습니다</string>
+    <string name="widget_login_required">로그인을 해주세요</string>
     <string name="widget_description">다가오는 하루알람 일정을 표시합니다</string>
     <string name="widget_add">알람 추가</string>
     <string name="widget_alarm_on">켜짐</string>

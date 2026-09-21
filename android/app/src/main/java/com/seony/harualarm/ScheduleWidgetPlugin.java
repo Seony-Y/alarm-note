@@ -18,7 +18,10 @@ public class ScheduleWidgetPlugin extends Plugin {
         SharedPreferences.Editor editor = getContext()
             .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit();
-        editor.putString("items", items == null ? "[]" : items.toString()).apply();
+        editor
+            .putBoolean("authenticated", call.getBoolean("authenticated", false))
+            .putString("items", items == null ? "[]" : items.toString())
+            .apply();
         ScheduleWidgetProvider.updateAll(getContext());
         call.resolve();
     }

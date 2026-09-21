@@ -5,6 +5,7 @@ import type { Schedule } from "./types";
 
 interface ScheduleWidgetPlugin {
   update(options: {
+    authenticated: boolean;
     items: Array<{
       id: string;
       date: string;
@@ -28,7 +29,10 @@ function occursOn(schedule: Schedule, date: Dayjs) {
   return date.day() === start.day();
 }
 
-export async function syncScheduleWidget(schedules: Schedule[]) {
+export async function syncScheduleWidget(
+  schedules: Schedule[],
+  authenticated: boolean,
+) {
   if (Capacitor.getPlatform() !== "android") return;
 
   const windowStart = dayjs().startOf("month");
@@ -64,7 +68,7 @@ export async function syncScheduleWidget(schedules: Schedule[]) {
       return true;
     });
 
-  await ScheduleWidget.update({ items });
+  await ScheduleWidget.update({ authenticated, items });
 }
 
 export async function registerScheduleWidgetActions(actions: {

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { App } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import dayjs, { type Dayjs } from "dayjs";
 import "dayjs/locale/ko";
 import Holidays from "date-holidays";
@@ -150,12 +152,34 @@ export function AlarmApp() {
   }, [setOwner]);
 
   useEffect(() => {
-    if (store.ready) {
-      void syncScheduleWidget(store.schedules).catch((error) =>
+    if (authReady && store.ready) {
+      void syncScheduleWidget(store.schedules, Boolean(session)).catch((error) =>
         console.error("위젯을 갱신할 수 없습니다.", error),
       );
     }
-  }, [store.ready, store.schedules]);
+  }, [authReady, session, store.ready, store.schedules]);
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android") return;
+    let active = true;
+    let removeListener: () => void | Promise<void> = () => undefined;
+    void App.addListener("backButton", () => {
+      if (formOpen) {
+        setFormOpen(false);
+      } else if (view !== "today") {
+        setView("today");
+      } else {
+        void App.exitApp();
+      }
+    }).then((listener) => {
+      if (active) removeListener = () => listener.remove();
+      else void listener.remove();
+    });
+    return () => {
+      active = false;
+      void removeListener();
+    };
+  }, [formOpen, view]);
 
   useEffect(() => {
     if (!store.ready) return;
@@ -773,6 +797,10 @@ function SettingsView({
   const [authBusy, setAuthBusy] = useState(false);
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+  const lastImportKey = `haru-alarm:last-calendar-import:${session?.user.id ?? "guest"}`;
+  const [lastCalendarImport, setLastCalendarImport] = useState(() =>
+    localStorage.getItem(lastImportKey),
+  );
 
   async function handleSignIn() {
     setAuthBusy(true);
@@ -807,6 +835,9 @@ function SettingsView({
     try {
       const count = await onImportCalendar();
       if (count !== null) {
+        const importedAt = new Date().toISOString();
+        localStorage.setItem(lastImportKey, importedAt);
+        setLastCalendarImport(importedAt);
         setCalendarMessage(`${count}개 일정을 가져왔습니다.`);
       }
     } catch (error) {
@@ -889,7 +920,10 @@ function SettingsView({
           <span>
             <strong>Google Calendar</strong>
             <small>
-              {calendarMessage ?? "앞으로 90일의 일정을 가져옵니다"}
+              {calendarMessage ??
+                (lastCalendarImport
+                  ? `최신 업데이트: ${dayjs(lastCalendarImport).format("YYYY.MM.DD HH:mm")}`
+                  : "앞으로 90일의 일정을 가져옵니다")}
             </small>
           </span>
           <div className="calendar-actions">
