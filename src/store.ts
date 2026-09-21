@@ -4,8 +4,16 @@ import {
   removeCloudSchedule,
   saveCloudSchedule,
 } from "./cloud";
-import { loadSchedules, removeSchedule, saveSchedule } from "./data";
-import { syncScheduleNotifications } from "./notifications";
+import {
+  loadSchedules,
+  removeSchedule,
+  replaceSchedules,
+  saveSchedule,
+} from "./data";
+import {
+  cancelAllScheduleNotifications,
+  syncScheduleNotifications,
+} from "./notifications";
 import type { Schedule } from "./types";
 
 interface ScheduleState {
@@ -23,6 +31,12 @@ interface ScheduleState {
 const sampleScheduleIds = ["sample-1", "sample-2", "sample-3"];
 let ownerLoadVersion = 0;
 
+async function restoreScheduleNotifications(schedules: Schedule[]) {
+  for (const schedule of schedules) {
+    await syncScheduleNotifications(schedule);
+  }
+}
+
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: [],
   ready: false,
@@ -33,6 +47,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const nextOwnerId = ownerId ?? "guest";
     if (get().ownerId === nextOwnerId && get().ready) return;
 
+    const resetNotifications = get().ready;
+    if (resetNotifications) {
+      try {
+        await cancelAllScheduleNotifications();
+      } catch (error) {
+        console.error("이전 계정의 알림을 정리할 수 없습니다.", error);
+      }
+    }
+    if (loadVersion !== ownerLoadVersion) return;
     set({ ready: false, ownerId: nextOwnerId, syncError: null });
     const localSchedules = await loadSchedules(nextOwnerId);
     if (loadVersion !== ownerLoadVersion) return;
@@ -42,15 +65,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       return;
     }
 
+    let schedulesToRestore = localSchedules;
     try {
       await Promise.all(
         sampleScheduleIds.map((id) => removeCloudSchedule(id, ownerId)),
       );
       const cloudSchedules = await loadCloudSchedules();
-      await Promise.all(
-        cloudSchedules.map((schedule) => saveSchedule(schedule, ownerId)),
-      );
+      await replaceSchedules(cloudSchedules, ownerId);
       if (loadVersion !== ownerLoadVersion) return;
+      schedulesToRestore = cloudSchedules;
       set({ schedules: cloudSchedules, ready: true });
     } catch (error) {
       if (loadVersion !== ownerLoadVersion) return;
@@ -60,6 +83,13 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         syncError:
           error instanceof Error ? error.message : "동기화할 수 없습니다.",
       });
+    }
+    if (resetNotifications) {
+      try {
+        await restoreScheduleNotifications(schedulesToRestore);
+      } catch (error) {
+        console.error("계정의 알림을 복원할 수 없습니다.", error);
+      }
     }
   },
   upsert: async (schedule) => {

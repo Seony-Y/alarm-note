@@ -1,6 +1,8 @@
 import { App } from "@capacitor/app";
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import type { LocalNotificationSchema } from "@capacitor/local-notifications";
 import dayjs, { type Dayjs } from "dayjs";
+import { scheduleNotificationDefinitions } from "./notifications";
 import type { Schedule } from "./types";
 
 interface ScheduleWidgetPlugin {
@@ -13,7 +15,11 @@ interface ScheduleWidgetPlugin {
       title: string;
       enabled: boolean;
     }>;
+    notifications: LocalNotificationSchema[];
   }): Promise<void>;
+  consumeToggles(): Promise<{
+    toggles: Array<{ id: string; enabled: boolean }>;
+  }>;
 }
 
 const ScheduleWidget = registerPlugin<ScheduleWidgetPlugin>("ScheduleWidget");
@@ -68,7 +74,14 @@ export async function syncScheduleWidget(
       return true;
     });
 
-  await ScheduleWidget.update({ authenticated, items });
+  const notifications = schedules.flatMap(scheduleNotificationDefinitions);
+  await ScheduleWidget.update({ authenticated, items, notifications });
+}
+
+export async function consumeScheduleWidgetToggles() {
+  if (Capacitor.getPlatform() !== "android") return [];
+  const result = await ScheduleWidget.consumeToggles();
+  return result.toggles;
 }
 
 export async function registerScheduleWidgetActions(actions: {

@@ -48,9 +48,11 @@ import {
 } from "./google-calendar.ts";
 import {
   requestAlarmPermissions,
+  scheduleNotificationDefinitions,
   syncScheduleNotifications,
 } from "./notifications";
 import {
+  consumeScheduleWidgetToggles,
   registerScheduleWidgetActions,
   syncScheduleWidget,
 } from "./schedule-widget";
@@ -78,6 +80,17 @@ const repeatLabels: Record<RepeatType, string> = {
   weekly: "매주",
 };
 
+async function applyScheduleWidgetToggles() {
+  const toggles = await consumeScheduleWidgetToggles();
+  for (const toggle of toggles) {
+    const state = useScheduleStore.getState();
+    const schedule = state.schedules.find((item) => item.id === toggle.id);
+    if (schedule && schedule.alarmEnabled !== toggle.enabled) {
+      await state.upsert({ ...schedule, alarmEnabled: toggle.enabled });
+    }
+  }
+}
+
 function reminderLabel(minutes: number) {
   if (minutes === 0) return "정시";
   if (minutes === 60) return "1시간 전";
@@ -95,18 +108,33 @@ export function AlarmApp() {
   const [formOpen, setFormOpen] = useState(false);
   const [permissionsReady, setPermissionsReady] = useState(false);
   const [alarmSettings, setAlarmSettings] = useState(getAlarmSettings);
+  const [toast, setToast] = useState<{ message: string } | null>(null);
+
+  function showToast(message: string) {
+    setToast({ message });
+  }
 
   function updateAlarmSettings(settings: AlarmSettings) {
     saveAlarmSettings(settings);
     setAlarmSettings(settings);
+    showToast("알람 방식이 변경되었습니다.");
     void (async () => {
       for (const schedule of store.schedules) {
         await syncScheduleNotifications(schedule);
       }
-    })().catch((error) =>
-      console.error("알림 설정을 적용할 수 없습니다.", error),
-    );
+    })().catch((error) => {
+      console.error("알림 설정을 적용할 수 없습니다.", error);
+      showToast("알람 설정을 적용하지 못했습니다.");
+    });
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => {
+      setToast((current) => (current === toast ? null : current));
+    }, 2200);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
@@ -153,11 +181,35 @@ export function AlarmApp() {
 
   useEffect(() => {
     if (authReady && store.ready) {
-      void syncScheduleWidget(store.schedules, Boolean(session)).catch((error) =>
-        console.error("위젯을 갱신할 수 없습니다.", error),
-      );
+      void applyScheduleWidgetToggles()
+        .then(() =>
+          syncScheduleWidget(
+            useScheduleStore.getState().schedules,
+            Boolean(session),
+          ),
+        )
+        .catch((error) => console.error("위젯을 갱신할 수 없습니다.", error));
     }
   }, [authReady, session, store.ready, store.schedules]);
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android" || !store.ready) return;
+    let active = true;
+    let removeListener: () => void | Promise<void> = () => undefined;
+    void App.addListener("appStateChange", ({ isActive }) => {
+      if (!active || !isActive) return;
+      void applyScheduleWidgetToggles().catch((error) =>
+        console.error("위젯 알람 상태를 반영할 수 없습니다.", error),
+      );
+    }).then((listener) => {
+      if (active) removeListener = () => listener.remove();
+      else void listener.remove();
+    });
+    return () => {
+      active = false;
+      void removeListener();
+    };
+  }, [store.ready]);
 
   useEffect(() => {
     if (Capacitor.getPlatform() !== "android") return;
@@ -214,7 +266,22 @@ export function AlarmApp() {
 
   async function toggleAlarm(id: string) {
     const schedule = store.schedules.find((item) => item.id === id);
+    if (
+      schedule &&
+      !schedule.alarmEnabled &&
+      scheduleNotificationDefinitions(schedule).length === 0
+    ) {
+      showToast("지난 일정에는 알람을 설정할 수 없습니다.");
+      return;
+    }
     await store.toggleAlarm(id);
+    if (schedule) {
+      showToast(
+        schedule.alarmEnabled
+          ? "알람이 취소되었습니다."
+          : "알람이 설정되었습니다.",
+      );
+    }
     if (schedule && !schedule.alarmEnabled && canUseDeviceAlarm()) {
       try {
         await addScheduleToDeviceAlarm({ ...schedule, alarmEnabled: true });
@@ -333,10 +400,30 @@ export function AlarmApp() {
           date={selectedDate.format("YYYY-MM-DD")}
           alarmSettings={alarmSettings}
           onClose={() => setFormOpen(false)}
-          onSave={async (schedule) => {
-            await store.upsert(schedule);
+          onCancel={() => {
             setFormOpen(false);
-            if (schedule.alarmEnabled && canUseDeviceAlarm()) {
+            showToast("변경이 취소되었습니다.");
+          }}
+          onSave={async (schedule) => {
+            const canEnableAlarm =
+              !schedule.alarmEnabled ||
+              scheduleNotificationDefinitions(schedule).length > 0;
+            await store.upsert(
+              canEnableAlarm ? schedule : { ...schedule, alarmEnabled: false },
+            );
+            setFormOpen(false);
+            showToast(
+              !canEnableAlarm
+                ? "일정은 저장했지만 지난 시간에는 알람을 설정할 수 없습니다."
+                : schedule.alarmEnabled
+                ? "알람이 설정되었습니다."
+                : "일정이 저장되었습니다.",
+            );
+            if (
+              schedule.alarmEnabled &&
+              canEnableAlarm &&
+              canUseDeviceAlarm()
+            ) {
               try {
                 await addScheduleToDeviceAlarm(schedule);
               } catch (error) {
@@ -349,10 +436,16 @@ export function AlarmApp() {
               ? async () => {
                   await store.remove(editing.id);
                   setFormOpen(false);
+                  showToast("일정이 삭제되었습니다.");
                 }
               : undefined
           }
         />
+      )}
+      {toast && (
+        <div className="app-toast" role="status" aria-live="polite">
+          {toast.message}
+        </div>
       )}
     </div>
   );
@@ -996,6 +1089,7 @@ function ScheduleForm({
   date,
   alarmSettings,
   onClose,
+  onCancel,
   onSave,
   onDelete,
 }: {
@@ -1003,6 +1097,7 @@ function ScheduleForm({
   date: string;
   alarmSettings: AlarmSettings;
   onClose: () => void;
+  onCancel: () => void;
   onSave: (schedule: Schedule) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
@@ -1160,7 +1255,7 @@ function ScheduleForm({
               </button>
             )}
             <span />
-            <button type="button" className="secondary" onClick={onClose}>
+            <button type="button" className="secondary" onClick={onCancel}>
               취소
             </button>
             <button type="submit" className="primary">

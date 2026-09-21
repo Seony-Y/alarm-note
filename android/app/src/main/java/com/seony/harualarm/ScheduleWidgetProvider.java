@@ -1,5 +1,6 @@
 package com.seony.harualarm;
 
+import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
@@ -9,15 +10,28 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.view.View;
 import android.widget.RemoteViews;
+import android.widget.Toast;
+import androidx.core.app.NotificationManagerCompat;
+import com.capacitorjs.plugins.localnotifications.LocalNotification;
+import com.capacitorjs.plugins.localnotifications.LocalNotificationManager;
+import com.capacitorjs.plugins.localnotifications.NotificationStorage;
+import com.capacitorjs.plugins.localnotifications.TimedNotificationPublisher;
+import com.getcapacitor.CapConfig;
+import com.getcapacitor.JSObject;
+import java.util.ArrayList;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,12 +39,18 @@ import org.json.JSONObject;
 public class ScheduleWidgetProvider extends AppWidgetProvider {
     private static final String ACTION_SELECT_DATE = "com.seony.harualarm.widget.SELECT_DATE";
     private static final String ACTION_CHANGE_MONTH = "com.seony.harualarm.widget.CHANGE_MONTH";
+    private static final String ACTION_TOGGLE_ALARM = "com.seony.harualarm.widget.TOGGLE_ALARM";
     private static final String EXTRA_DATE = "date";
     private static final String EXTRA_MONTH_DELTA = "month_delta";
+    private static final String EXTRA_SCHEDULE_ID = "schedule_id";
+    private static final String EXTRA_ENABLED = "enabled";
     private static final String KEY_SELECTED_DATE = "selected_date";
     private static final String KEY_DISPLAY_MONTH = "display_month";
     private static final int[] ROW_IDS = {
         R.id.widget_row_1, R.id.widget_row_2, R.id.widget_row_3
+    };
+    private static final int[] ROW_CONTENT_IDS = {
+        R.id.widget_row_content_1, R.id.widget_row_content_2, R.id.widget_row_content_3
     };
     private static final int[] TIME_IDS = {
         R.id.widget_time_1, R.id.widget_time_2, R.id.widget_time_3
@@ -88,6 +108,28 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 .putString(KEY_DISPLAY_MONTH, selectedDate.substring(0, 7))
                 .apply();
             updateAll(context);
+        } else if (ACTION_TOGGLE_ALARM.equals(action)) {
+            String scheduleId = intent.getStringExtra(EXTRA_SCHEDULE_ID);
+            if (scheduleId != null) {
+                boolean enabled = intent.getBooleanExtra(EXTRA_ENABLED, false);
+                boolean applied = applyNotificationState(
+                    context,
+                    preferences,
+                    scheduleId,
+                    enabled
+                );
+                if (applied) {
+                    setAlarmEnabled(preferences, scheduleId, enabled);
+                    updateAll(context);
+                }
+                Toast.makeText(
+                    context,
+                    applied
+                        ? enabled ? "알람이 설정되었습니다." : "알람이 취소되었습니다."
+                        : "알람 상태를 변경하지 못했습니다.",
+                    Toast.LENGTH_SHORT
+                ).show();
+            }
         }
     }
 
@@ -216,15 +258,22 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             views.setViewVisibility(ROW_IDS[row], View.VISIBLE);
             views.setViewVisibility(TOGGLE_ON_IDS[row], enabled ? View.VISIBLE : View.GONE);
             views.setViewVisibility(TOGGLE_OFF_IDS[row], enabled ? View.GONE : View.VISIBLE);
+            String scheduleId = item.optString("id");
             PendingIntent openAlarms = widgetAction(
                 context,
                 "alarms",
                 selectedDate,
                 100 + row
             );
-            views.setOnClickPendingIntent(ROW_IDS[row], openAlarms);
-            views.setOnClickPendingIntent(TOGGLE_ON_IDS[row], openAlarms);
-            views.setOnClickPendingIntent(TOGGLE_OFF_IDS[row], openAlarms);
+            PendingIntent toggleAlarm = widgetToggle(
+                context,
+                scheduleId,
+                !enabled,
+                200 + row
+            );
+            views.setOnClickPendingIntent(ROW_CONTENT_IDS[row], openAlarms);
+            views.setOnClickPendingIntent(TOGGLE_ON_IDS[row], toggleAlarm);
+            views.setOnClickPendingIntent(TOGGLE_OFF_IDS[row], toggleAlarm);
             row++;
         }
 
@@ -274,6 +323,170 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+    }
+
+    private static PendingIntent widgetToggle(
+        Context context,
+        String scheduleId,
+        boolean enabled,
+        int requestCode
+    ) {
+        Intent intent = new Intent(context, ScheduleWidgetProvider.class)
+            .setAction(ACTION_TOGGLE_ALARM)
+            .setData(Uri.parse("haru-widget://toggle/" + Uri.encode(scheduleId)))
+            .putExtra(EXTRA_SCHEDULE_ID, scheduleId)
+            .putExtra(EXTRA_ENABLED, enabled);
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    private static void setAlarmEnabled(
+        SharedPreferences preferences,
+        String scheduleId,
+        boolean enabled
+    ) {
+        JSONArray items = readItems(preferences);
+        for (int index = 0; index < items.length(); index++) {
+            JSONObject item = items.optJSONObject(index);
+            if (item == null || !scheduleId.equals(item.optString("id"))) continue;
+            try {
+                item.put("enabled", enabled);
+            } catch (JSONException exception) {
+                return;
+            }
+        }
+
+        try {
+            JSONObject pending = new JSONObject(
+                preferences.getString(ScheduleWidgetPlugin.KEY_PENDING_TOGGLES, "{}")
+            );
+            pending.put(scheduleId, enabled);
+            preferences.edit()
+                .putString("items", items.toString())
+                .putString(ScheduleWidgetPlugin.KEY_PENDING_TOGGLES, pending.toString())
+                .commit();
+        } catch (JSONException exception) {
+            preferences.edit().putString("items", items.toString()).commit();
+        }
+    }
+
+    private static boolean applyNotificationState(
+        Context context,
+        SharedPreferences preferences,
+        String scheduleId,
+        boolean enabled
+    ) {
+        NotificationStorage storage = new NotificationStorage(context);
+        List<LocalNotification> notifications = notificationDefinitions(
+            preferences,
+            scheduleId,
+            storage
+        );
+        if (!enabled) {
+            for (LocalNotification notification : notifications) {
+                Integer id = notification.getId();
+                if (id == null) continue;
+                cancelNotification(context, id);
+                storage.deleteNotification(Integer.toString(id));
+            }
+            return true;
+        }
+
+        List<LocalNotification> futureNotifications = new ArrayList<>();
+        for (LocalNotification notification : notifications) {
+            if (!notification.isTriggered()) futureNotifications.add(notification);
+        }
+        if (futureNotifications.isEmpty()) return false;
+
+        try {
+            LocalNotificationManager manager = new LocalNotificationManager(
+                storage,
+                null,
+                context,
+                CapConfig.loadDefault(context)
+            );
+            if (manager.schedule(null, futureNotifications) == null) return false;
+            storage.appendNotifications(futureNotifications);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static List<LocalNotification> notificationDefinitions(
+        SharedPreferences preferences,
+        String scheduleId,
+        NotificationStorage storage
+    ) {
+        List<LocalNotification> result = new ArrayList<>();
+        Set<Integer> ids = new HashSet<>();
+        try {
+            JSONArray definitions = new JSONArray(
+                preferences.getString(ScheduleWidgetPlugin.KEY_NOTIFICATION_DEFINITIONS, "[]")
+            );
+            for (int index = 0; index < definitions.length(); index++) {
+                JSONObject definition = definitions.optJSONObject(index);
+                if (definition == null) continue;
+                JSONObject extra = definition.optJSONObject("extra");
+                if (extra == null || !scheduleId.equals(extra.optString("scheduleId"))) continue;
+                LocalNotification notification = LocalNotification.Companion
+                    .buildNotificationFromJSObject(new JSObject(definition.toString()));
+                result.add(notification);
+                if (notification.getId() != null) ids.add(notification.getId());
+            }
+        } catch (Exception exception) {
+            result.clear();
+            ids.clear();
+        }
+        for (LocalNotification notification : storage.getSavedNotifications()) {
+            Integer id = notification.getId();
+            if (id == null || ids.contains(id) || !belongsToSchedule(notification, scheduleId)) {
+                continue;
+            }
+            result.add(notification);
+            ids.add(id);
+        }
+        return result;
+    }
+
+    private static boolean belongsToSchedule(
+        LocalNotification notification,
+        String scheduleId
+    ) {
+        try {
+            String source = notification.getSource();
+            if (source == null) return false;
+            JSONObject extra = new JSONObject(source).optJSONObject("extra");
+            return extra != null && scheduleId.equals(extra.optString("scheduleId"));
+        } catch (JSONException exception) {
+            return false;
+        }
+    }
+
+    private static void cancelNotification(Context context, int notificationId) {
+        Intent intent = new Intent(context, TimedNotificationPublisher.class);
+        int flags = PendingIntent.FLAG_NO_CREATE;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        }
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+            context,
+            notificationId,
+            intent,
+            flags
+        );
+        if (pendingIntent != null) {
+            AlarmManager alarmManager = (AlarmManager) context.getSystemService(
+                Context.ALARM_SERVICE
+            );
+            alarmManager.cancel(pendingIntent);
+            pendingIntent.cancel();
+        }
+        NotificationManagerCompat.from(context).cancel(notificationId);
     }
 
     private static SharedPreferences preferences(Context context) {

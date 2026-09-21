@@ -739,6 +739,23 @@ textarea {
 .bottom-nav {
   display: none;
 }
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 40;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: 7px;
+  background: #242321;
+  color: #fff;
+  box-shadow: 0 10px 30px #0003;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+  animation: toast-in 0.18s ease-out;
+}
 .loading {
   min-height: 100vh;
   display: grid;
@@ -750,6 +767,12 @@ textarea {
   from {
     transform: translateX(28px);
     opacity: 0.5;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
   }
 }
 
@@ -819,6 +842,9 @@ textarea {
   .bottom-nav button.active {
     color: var(--orange-dark);
     font-weight: 700;
+  }
+  .app-toast {
+    bottom: calc(88px + env(safe-area-inset-bottom));
   }
   .calendar-grid button {
     height: 70px;

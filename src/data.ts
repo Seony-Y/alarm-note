@@ -62,6 +62,31 @@ export async function saveSchedule(schedule: Schedule, ownerId = "guest") {
   });
 }
 
+export async function replaceSchedules(
+  schedules: Schedule[],
+  ownerId: string,
+) {
+  const db = await database;
+  const transaction = db.transaction("user-schedules", "readwrite");
+  let cursor = await transaction.store.openCursor();
+  while (cursor) {
+    if ((cursor.value as StoredSchedule).ownerId === ownerId) {
+      await cursor.delete();
+    }
+    cursor = await cursor.continue();
+  }
+  await Promise.all(
+    schedules.map((schedule) =>
+      transaction.store.put({
+        ...schedule,
+        ownerId,
+        storageId: `${ownerId}:${schedule.id}`,
+      }),
+    ),
+  );
+  await transaction.done;
+}
+
 export async function removeSchedule(id: string, ownerId = "guest") {
   const db = await database;
   await db.delete(

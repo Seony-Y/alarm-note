@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import {
   LocalNotifications,
+  type LocalNotificationSchema,
   type Schedule as NotificationSchedule,
   Weekday,
 } from "@capacitor/local-notifications";
@@ -81,6 +82,30 @@ export async function requestAlarmPermissions() {
   return true;
 }
 
+export function scheduleNotificationDefinitions(
+  schedule: Schedule,
+): LocalNotificationSchema[] {
+  if (schedule.completed) return [];
+
+  const startsAt = new Date(`${schedule.date}T${schedule.time}:00`);
+  const alarmMode = alarmModeFlags(getAlarmSettings().mode);
+  return schedule.notifyBeforeMinutes.flatMap((minutes, reminderIndex) =>
+    notificationSchedules(schedule, startsAt, minutes).map(
+      (notificationSchedule, slot) => ({
+        id: notificationId(schedule.id, reminderIndex, slot),
+        title: schedule.title,
+        body:
+          minutes === 0
+            ? "일정 시간이 되었습니다."
+            : `${minutes}분 후 일정이 시작됩니다.`,
+        schedule: notificationSchedule,
+        sound: alarmMode.soundEnabled ? "default" : undefined,
+        extra: { scheduleId: schedule.id },
+      }),
+    ),
+  );
+}
+
 export async function syncScheduleNotifications(schedule: Schedule) {
   if (!Capacitor.isNativePlatform()) return;
 
@@ -95,25 +120,20 @@ export async function syncScheduleNotifications(schedule: Schedule) {
 
   if (!(await requestAlarmPermissions())) return;
 
-  const startsAt = new Date(`${schedule.date}T${schedule.time}:00`);
-  const alarmMode = alarmModeFlags(getAlarmSettings().mode);
-  const notifications = schedule.notifyBeforeMinutes.flatMap(
-    (minutes, reminderIndex) =>
-      notificationSchedules(schedule, startsAt, minutes).map(
-        (notificationSchedule, slot) => ({
-          id: notificationId(schedule.id, reminderIndex, slot),
-          title: schedule.title,
-          body:
-            minutes === 0
-              ? "일정 시간이 되었습니다."
-              : `${minutes}분 후 일정이 시작됩니다.`,
-          schedule: notificationSchedule,
-          sound: alarmMode.soundEnabled ? "default" : undefined,
-          extra: { scheduleId: schedule.id },
-        }),
-      ),
-  );
+  const notifications = scheduleNotificationDefinitions(schedule);
 
   if (notifications.length)
     await LocalNotifications.schedule({ notifications });
+}
+
+export async function cancelAllScheduleNotifications() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  const pending = await LocalNotifications.getPending();
+  const scheduleNotifications = pending.notifications
+    .filter((notification) => notification.extra?.scheduleId)
+    .map(({ id }) => ({ id }));
+  if (scheduleNotifications.length) {
+    await LocalNotifications.cancel({ notifications: scheduleNotifications });
+  }
 }
